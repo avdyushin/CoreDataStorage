@@ -18,6 +18,10 @@ final class CoreDataStorageTests: XCTestCase {
             super.awakeFromInsert()
             id = UUID()
         }
+
+        static func fetchItems() -> NSFetchRequest<Item> {
+            NSFetchRequest(entityName: "Item")
+        }
     }
 
     private static let managedObjectModel = CoreDataModel {
@@ -32,7 +36,7 @@ final class CoreDataStorageTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
 
-        let container = NSPersistentContainer(name: "Temp", managedObjectModel: CoreDataStorageTests.managedObjectModel)
+        let container = NSPersistentContainer(name: "Temp", managedObjectModel: Self.managedObjectModel)
         let description = NSPersistentStoreDescription()
         description.type = NSInMemoryStoreType
         description.shouldAddStoreAsynchronously = false
@@ -49,16 +53,55 @@ final class CoreDataStorageTests: XCTestCase {
 
     func testMainContextPerform() throws {
         XCTAssertTrue(try storage.mainContext.fetch(Item.fetchRequest()).isEmpty)
-        let expectation = XCTestExpectation(description: "Created")
-        storage.mainContext.perform { [storage] in
+        storage.mainContext.performAndWait { [storage] in
             let item = Item(context: storage!.mainContext)
             item.name = "Foo"
             XCTAssertTrue(Thread.isMainThread)
-            expectation.fulfill()
         }
-        wait(for: [expectation], timeout: 10)
         let items: [Item] = try storage.mainContext.fetch(Item.fetchRequest()) as! [Item]
         XCTAssertEqual(items.first?.name, "Foo")
+    }
+
+    func testMainContextFetch() throws {
+        XCTAssertTrue(try storage.mainContext.fetch(Item.fetchRequest()).isEmpty)
+        storage.mainContext.performAndWait { [storage] in
+            let item = Item(context: storage!.mainContext)
+            item.name = "Foo"
+            XCTAssertTrue(Thread.isMainThread)
+        }
+        let expectation = XCTestExpectation(description: "Fetched")
+        let cancellable = storage
+            .fetch(Item.fetchItems())
+            .sink(receiveCompletion: { completion in },
+                  receiveValue: { value in
+                    let items: [Item] = value
+                    XCTAssertEqual(items.first?.name, "Foo")
+                    expectation.fulfill()
+            })
+        wait(for: [expectation], timeout: 10)
+        XCTAssertNotNil(cancellable)
+    }
+
+    func testBackgroundContextFetch() throws {
+        XCTAssertTrue(try storage.mainContext.fetch(Item.fetchRequest()).isEmpty)
+        storage.mainContext.performAndWait { [storage] in
+            let item = Item(context: storage!.mainContext)
+            item.name = "Foo"
+            XCTAssertTrue(Thread.isMainThread)
+            try! storage!.mainContext.save()
+        }
+        let expectation = XCTestExpectation(description: "Fetched")
+        let cancellable = storage
+            .fetch(Item.fetchItems(), inContext: .background)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in },
+                  receiveValue: { value in
+                    let items: [Item] = value
+                    XCTAssertEqual(items.first?.name, "Foo")
+                    expectation.fulfill()
+            })
+        wait(for: [expectation], timeout: 10)
+        XCTAssertNotNil(cancellable)
     }
 
     func testMainContextPerformAndWait() throws {
@@ -113,6 +156,8 @@ final class CoreDataStorageTests: XCTestCase {
     static var allTests = [
         ("testMainContextPerform", testMainContextPerform),
         ("testMainContextWait", testMainContextPerformAndWait),
+        ("testMainContextFetch", testMainContextFetch),
+        ("testBackgroundContextFetch", testBackgroundContextFetch),
         ("testBackgroundContextSave", testBackgroundContext),
     ]
 }

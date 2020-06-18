@@ -9,12 +9,24 @@ import Combine
 import CoreData
 
 public struct CoreDataStorage {
+
+    public enum Context {
+        case main, background
+    }
+
     /// Main/UI context
     public var mainContext: NSManagedObjectContext { container.viewContext }
     /// Background context
-    public let privateContext: NSManagedObjectContext
+    public let backgroundContext: NSManagedObjectContext
     /// Persistent container
     public let container: NSPersistentContainer
+
+    private func context(inContext: Context) -> NSManagedObjectContext {
+        switch inContext {
+        case .main: return mainContext
+        case .background: return backgroundContext
+        }
+    }
 
     public init(container: NSPersistentContainer) {
         self.container = container
@@ -26,7 +38,22 @@ public struct CoreDataStorage {
             }
         }
         self.container.viewContext.automaticallyMergesChangesFromParent = true
-        self.privateContext = container.newBackgroundContext()
+        self.backgroundContext = container.newBackgroundContext()
+    }
+
+    /// Performs given fetch request on given context
+    public func fetch<T>(_ fetchRequest: NSFetchRequest<T>, inContext context: Context = .main) -> AnyPublisher<[T], Error> {
+        weak var context = self.context(inContext: context)
+        return Future<[T], Error> { promise in
+            guard let context = context else { return }
+            context.perform {
+                do {
+                    promise(.success(try context.fetch(fetchRequest)))
+                } catch {
+                    promise(.failure(error))
+                }
+            }
+        }.eraseToAnyPublisher()
     }
 
     /// Performs given `block` on background context and calls `save()` if `hasChanges` is true.

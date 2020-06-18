@@ -34,6 +34,21 @@ let cancellable = storage
     })
 ```
 
+Fetch items in given context type:
+
+```swift
+let cancellable = storage
+    .fetch(Item.fetchItems(), inContext: .background)
+    .receive(on: DispatchQueue.main)
+    .sink(
+        receiveCompletion: { completion in
+        // process completion on main queue
+    },
+        receiveValue: { value in
+            let items: [Item] = value
+    })
+```
+
 ### How to test?
 
 Use `CoreDataModel` to build `ManagedObjectModel` which you can provide to `NSPersistentContainer`:
@@ -72,4 +87,3 @@ container.persistentStoreDescriptions = [description]
 1. Copy-paste repository URL: **https://github.com/avdyushin/CoreDataStorage**
 1. Hit **Next** two times, under **Add to Target** select your build target.
 1. Hit **Finish**
-

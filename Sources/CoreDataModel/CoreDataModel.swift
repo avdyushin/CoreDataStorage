@@ -52,7 +52,7 @@ public struct Property {
 
 public struct CoreDataModel {
 
-    private var entities: [Entity]
+    private let entities: [Entity]
 
     @_functionBuilder public struct CoreDataModelBuilder {
         static func buildBlock(_ entity: Entity) -> Entity { entity }
@@ -68,20 +68,31 @@ public struct CoreDataModel {
     }
 
     public func build() -> NSManagedObjectModel {
-        let model = NSManagedObjectModel()
-        model.entities = entities.map { entity in
-            let desciption = NSEntityDescription()
-            desciption.name = entity.name
-            desciption.managedObjectClassName = NSStringFromClass(entity.className)
-            desciption.properties = entity.properties.map { attr in
-                let attribute = NSAttributeDescription()
-                attribute.name = attr.name
-                attribute.attributeType = attr.type
-                attribute.isOptional = attr.isOptional
-                return attribute
-            }
-            return desciption
-        }
-        return model
+        NSManagedObjectModel(entities: entities)
+    }
+}
+
+extension NSManagedObjectModel {
+    convenience init(entities: [Entity]) {
+        self.init()
+        self.entities = entities.map(NSEntityDescription.init)
+    }
+}
+
+extension NSEntityDescription {
+    convenience init(entity: Entity) {
+        self.init()
+        self.name = entity.name
+        self.managedObjectClassName = NSStringFromClass(entity.className)
+        self.properties = entity.properties.map(NSAttributeDescription.init)
+    }
+}
+
+extension NSAttributeDescription {
+    convenience init(property: Property) {
+        self.init()
+        self.name = property.name
+        self.attributeType = property.type
+        self.isOptional = property.isOptional
     }
 }
